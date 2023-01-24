@@ -11,6 +11,7 @@ namespace SwagImportExport\Controllers\Backend;
 
 use Doctrine\ORM\AbstractQuery;
 use Shopware\Components\CSRFWhitelistAware;
+use Shopware\Components\Random;
 use SwagImportExport\Components\UploadPathProvider;
 use SwagImportExport\Models\Logger;
 use SwagImportExport\Models\LoggerRepository;
@@ -51,7 +52,7 @@ class Shopware_Controllers_Backend_SwagImportExport extends \Shopware_Controller
             return;
         }
 
-        $clientOriginalName = $file->getClientOriginalName();
+        $fileName = $file->getClientOriginalName();
 
         $extension = $file->getClientOriginalExtension();
 
@@ -61,13 +62,19 @@ class Shopware_Controllers_Backend_SwagImportExport extends \Shopware_Controller
             return;
         }
 
-        $file->move($this->uploadPathProvider->getPath(), $clientOriginalName);
+        // if file name already exists, add random string
+        // to file name to prevent file override
+        if ($this->isFileNameExisting($fileName)) {
+            $fileName = $this->getRandomizedFileName($fileName);
+        }
+
+        $file->move($this->uploadPathProvider->getPath(), $fileName);
 
         $this->view->assign([
             'success' => true,
             'data' => [
-                'path' => $this->uploadPathProvider->getRealPath($clientOriginalName),
-                'fileName' => $clientOriginalName,
+                'path' => $this->uploadPathProvider->getRealPath($fileName),
+                'fileName' => $fileName,
             ],
         ]);
     }
@@ -183,5 +190,34 @@ class Shopware_Controllers_Backend_SwagImportExport extends \Shopware_Controller
             default:
                 return false;
         }
+    }
+
+    private function isFileNameExisting(string $filename): bool
+    {
+        return file_exists(
+            $this->uploadPathProvider->getRealPath($filename)
+        );
+    }
+
+    private function getRandomizedFileName(string $oldFileName): string
+    {
+        $fileName = pathinfo($oldFileName, PATHINFO_FILENAME);
+        $fileExtension = pathinfo($oldFileName, PATHINFO_EXTENSION);
+
+        $randomString = Random::getAlphanumericString(13);
+
+        $newFileName = sprintf(
+            '%s-%s.%s',
+            $fileName,
+            $randomString,
+            $fileExtension
+        );
+
+        // make sure that the new filename is unused
+        if ($this->isFileNameExisting($newFileName)) {
+            return $this->getRandomizedFileName($oldFileName);
+        }
+
+        return $newFileName;
     }
 }
